@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Place Search</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    
+    h1 {
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    form {
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    input[type="text"], textarea {
+      padding: 5px;
+    }
+    
+    button {
+      padding: 5px 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 80%;
+    }
+    
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    th {
+      background-color: #f2f2f2;
+    }
+    
+    #statusHeader {
+      text-align: center;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  
+  <h1>Place Search</h1>
+  <form id="searchForm">
+    <label for="coordinates">Coordinates (Lat, Long):</label>
+    <textarea id="coordinates" rows="5" required></textarea>
+    <label for="type">Type:</label>
+    <input type="text" id="type" required>
+    <button type="submit">Search</button>
+  </form>
+  
+  <h2 id="statusHeader"></h2>
+  
+  <table id="results">
+    <tr>
+      <th>Sl No</th>
+      <th>Name</th>
+      <th>Location</th>
+      <th>Place ID</th>
+    </tr>
+  </table>
+  
+  <button id="exportButton" disabled>Export to Excel</button>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+  <script>
+    var exportButton = document.getElementById("exportButton");
+    var tablePopulated = false;
+    
+    document.getElementById("searchForm").addEventListener("submit", function(event) {
+      event.preventDefault();
+      var coordinates = document.getElementById("coordinates").value;
+      var type = document.getElementById("type").value;
+      
+      var pairs = coordinates.split("\n");
+      clearTable();
+      displayStatus("Processing");
+      searchPlaces(pairs, type);
+    });
+    
+    function clearTable() {
+      var resultsTable = document.getElementById("results");
+      var rowCount = resultsTable.rows.length;
+      for (var i = rowCount - 1; i > 0; i--) {
+        resultsTable.deleteRow(i);
+      }
+      
+      tablePopulated = false;
+      exportButton.disabled = true;
+    }
+    
+    function displayStatus(status) {
+      var statusHeader = document.getElementById("statusHeader");
+      statusHeader.textContent = status;
+    }
+    
+    function searchPlaces(pairs, type, nextPageToken) {
+      if (pairs.length === 0) {
+        tablePopulated = true;
+        exportButton.disabled = false;
+        displayStatus("Task Completed");
+        return;
+      }
+      
+      var coordinates = pairs[0].trim();
+      
+      var url = "https://corsproxy.io/?https://maps.googleapis.com/maps/api/place/textsearch/json?key={YOUR_API_KEY}&type=" + type +
+        "&location=" + coordinates;
+      
+      if (nextPageToken) {
+        url += "&pagetoken=" + nextPageToken;
+      }
+      
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          displayResults(data.results);
+          
+          if (data.next_page_token) {
+            setTimeout(function() {
+              searchPlaces(pairs, type, data.next_page_token);
+            }, 2000);
+          } else {
+            pairs.shift();
+            searchPlaces(pairs, type);
+          }
+        })
+        .catch(error => console.error("Error:", error));
+    }
+    
+    function displayResults(results) {
+      var resultsTable = document.getElementById("results");
+      var rowsCount = resultsTable.rows.length;
+      
+      results.forEach(function(place, index) {
+        var name = place.name;
+        var location = place.formatted_address;
+        var placeId = place.place_id;
+        
+        var row = resultsTable.insertRow(rowsCount + index);
+        var slNoCell = row.insertCell(0);
+        var nameCell = row.insertCell(1);
+        var locationCell = row.insertCell(2);
+        var placeIdCell = row.insertCell(3);
+        
+        slNoCell.textContent = rowsCount + index;
+        nameCell.textContent = name;
+        locationCell.textContent = location;
+        placeIdCell.textContent = placeId;
+      });
+    }
+    
+    exportButton.addEventListener("click", function() {
+      if (!tablePopulated) {
+        alert("Table entries are still incomplete. Please wait for the table to be fully populated.");
+        return;
+      }
+      
+      var resultsTable = document.getElementById("results");
+      var workbook = XLSX.utils.table_to_book(resultsTable);
+      XLSX.writeFile(workbook, "place_search_results.xlsx");
+    });
+  </script>
+</body>
+</html>
